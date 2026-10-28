@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>3D Weather Globe</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+
+        :root {
+            --glass-bg:       rgba(15, 23, 42, 0.82);
+            --glass-bg-deep:  rgba(15, 23, 42, 0.92);
+            --glass-border:   rgba(255,255,255,0.12);
+            --glass-text:     #e2e8f0;
+            --glass-muted:    #94a3b8;
+            --glass-input-bg: rgba(30, 41, 59, 0.8);
+            --glass-accent:   #0ea5e9;
+            --glass-accent-h: #38bdf8;
+            --glass-font:     'Segoe UI', Arial, sans-serif;
+        }
+
+        #date-selector-overlay {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 1002;
+            font-family: var(--glass-font);
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            backdrop-filter: blur(10px);
+            color: var(--glass-text);
+        }
+        #date-selector-overlay .ds-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            color: var(--glass-muted);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            display: block;
+        }
+        #date-selector-overlay .ds-row {
+            display: flex;
+            gap: 6px;
+        }
+        #date-selector-overlay select {
+            flex: 1;
+            background: var(--glass-input-bg);
+            color: var(--glass-text);
+            border: 1px solid var(--glass-border);
+            border-radius: 6px;
+            padding: 7px 8px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            font-family: var(--glass-font);
+        }
+        #date-selector-overlay select:focus { border-color: var(--glass-accent); }
+
+        #weather-details-overlay {
+            position: fixed;
+            top: 92px;
+            right: 18px;
+            width: 250px;
+            font-family: var(--glass-font);
+            z-index: 1001;
+            background: var(--glass-bg-deep);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 12px 14px 12px;
+            backdrop-filter: blur(10px);
+            color: var(--glass-text);
+            display: none;
+        }
+        #weather-details-overlay h2 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--glass-accent-h);
+            padding-right: 20px;
+        }
+        #weather-details-overlay p { margin: 0; }
+        .wd-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .wd-row:last-of-type { border-bottom: none; }
+        .wd-key {
+            color: var(--glass-muted);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .wd-val {
+            color: var(--glass-text);
+            font-size: 13px;
+            font-weight: 600;
+        }
+        #close-btn {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            font-size: 15px;
+            cursor: pointer;
+            color: var(--glass-muted);
+            line-height: 1;
+            transition: color 0.15s;
+        }
+        #close-btn:hover { color: var(--glass-text); }
+        #loading-message {
+            color: var(--glass-muted);
+            font-size: 12px;
+            text-align: center;
+            padding: 6px 0;
+        }
+
+        #graph-widget {
+          position: fixed;
+          top: 18px;
+          left: 18px;
+          z-index: 1000;
+          font-family: 'Segoe UI', Arial, sans-serif;
+          width: 680px;
+        }
+
+        #graph-toggle-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(15, 23, 42, 0.82);
+          color: #e2e8f0;
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 8px;
+          padding: 8px 16px;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          cursor: pointer;
+          backdrop-filter: blur(10px);
+          transition: background 0.2s, border-color 0.2s;
+          width: 100%;
+          text-align: left;
+        }
+        #graph-toggle-btn:hover {
+          background: rgba(30, 41, 59, 0.92);
+          border-color: rgba(255,255,255,0.22);
+        }
+        #graph-toggle-btn .arrow {
+          margin-left: auto;
+          transition: transform 0.25s ease;
+          font-size: 10px;
+        }
+        #graph-widget.open #graph-toggle-btn .arrow {
+          transform: rotate(180deg);
+        }
+
+        #graph-controls {
+          display: none;
+          flex-direction: column;
+          gap: 10px;
+          margin-top: 6px;
+          background: rgba(15, 23, 42, 0.88);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          padding: 14px 14px 12px;
+          backdrop-filter: blur(10px);
+        }
+        #graph-widget.open #graph-controls {
+          display: flex;
+        }
+
+        #graph-controls label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          color: #94a3b8;
+          text-transform: uppercase;
+          margin-bottom: 3px;
+          display: block;
+        }
+
+        #graph-controls input[type="date"],
+        #graph-controls select {
+          width: 100%;
+          background: rgba(30, 41, 59, 0.8);
+          color: #e2e8f0;
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 6px;
+          padding: 7px 10px;
+          font-size: 13px;
+          outline: none;
+          box-sizing: border-box;
+          cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+        }
+        #graph-controls input[type="date"]:focus,
+        #graph-controls select:focus {
+          border-color: #38bdf8;
+        }
+
+        #graph-controls input[type="date"]::-webkit-calendar-picker-indicator {
+          filter: invert(1) opacity(0.5);
+          cursor: pointer;
+        }
+
+        #graph-show-btn {
+          width: 100%;
+          background: #0ea5e9;
+          color: #fff;
+          border: none;
+          border-radius: 6px;
+          padding: 8px 0;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          cursor: pointer;
+          transition: background 0.2s;
+          margin-top: 2px;
+        }
+        #graph-show-btn:hover  { background: #38bdf8; }
+        #graph-show-btn:active { background: #0284c7; }
+
+        #graph-toggle-btn:disabled {
+          opacity: 0.38;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+        #graph-toggle-btn:disabled .arrow { display: none; }
+        #graph-no-city-hint {
+          font-size: 11px;
+          color: #64748b;
+          margin-top: 4px;
+          padding-left: 2px;
+          display: block;
+        }
+
+        #graph-chart-wrap {
+          display: none;
+          margin-top: 8px;
+          background: rgba(15, 23, 42, 0.92);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          padding: 14px 12px 10px;
+          backdrop-filter: blur(10px);
+        }
+        #graph-chart-wrap.visible {
+          display: block;
+        }
+        #graph-chart-wrap canvas {
+          width: 100% !important;
+          height: 540px !important;
+        }
+        #graph-chart-title {
+          font-size: 11px;
+          color: #94a3b8;
+          margin-bottom: 8px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        }
+        #graph-loading {
+          color: #94a3b8;
+          font-size: 12px;
+          text-align: center;
+          padding: 20px 0;
+          display: none;
+        }
+
+        #graph-metric-toggle {
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+        }
+        .metric-btn {
+          flex: 1;
+          background: rgba(30, 41, 59, 0.7);
+          color: #94a3b8;
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 6px;
+          padding: 7px 0;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          font-family: 'Segoe UI', Arial, sans-serif;
+          transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+        .metric-btn:hover  { background: rgba(30,41,59,0.95); color: #e2e8f0; }
+        .metric-btn.active {
+          background: #0ea5e9;
+          color: #fff;
+          border-color: #0ea5e9;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="graph-widget">
+
+      <button id="graph-toggle-btn" onclick="graphToggle()" disabled>
+        📈 GRAFIC
+        <span class="arrow">▼</span>
+      </button>
+      <span id="graph-no-city-hint">Selectează un oraș pentru a activa graficul</span>
+
+      <div id="graph-controls">
+        <div>
+          <label for="graph-period">Perioadă</label>
+          <select id="graph-period">
+            <option value="1" selected>1 an</option>
+            <option value="5">5 ani</option>
+            <option value="10">10 ani</option>
+            <option value="25">25 ani</option>
+            <option value="50">50 ani</option>
+          </select>
+        </div>
+        <button id="graph-show-btn" onclick="graphShow()">AFIȘEAZĂ</button>
+      </div>
+
+      <div id="graph-chart-wrap">
+        <div id="graph-chart-title">Istoric temperatură</div>
+        <div id="graph-loading">Se încarcă…</div>
+        <canvas id="graph-canvas"></canvas>
+        <div id="graph-metric-toggle">
+          <button class="metric-btn active" onclick="graphSetMetric('temperature', this)">🌡 Temperatură</button>
+          <button class="metric-btn"        onclick="graphSetMetric('humidity',    this)">💧 Umiditate</button>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="date-selector-overlay">
+        <span class="ds-label">&#128197; Dată</span>
+        <div class="ds-row">
+            <select id="year-select"></select>
+            <select id="month-select"></select>
+            <select id="day-select"></select>
+        </div>
+    </div>
+
+    <div id="weather-details-overlay">
+        <span id="close-btn">&times;</span>
+        <h2 id="city-name-display"></h2>
+        <div class="wd-row">
+            <span class="wd-key">Dată</span>
+            <span class="wd-val" id="date-display"></span>
+        </div>
+        <div class="wd-row">
+            <span class="wd-key">Temperatură</span>
+            <span class="wd-val" id="temp-display"></span>
+        </div>
+        <div class="wd-row">
+            <span class="wd-key">Umiditate</span>
+            <span class="wd-val" id="humidity-display"></span>
+        </div>
+        <div class="wd-row">
+            <span class="wd-key">Condiții</span>
+            <span class="wd-val" id="condition-display"></span>
+        </div>
+        <p id="loading-message" style="display: none;">Se încarcă...</p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+
+        (function() {
+
+            const scene = new THREE.Scene();
+
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 1.7;
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(5, 3, 5);
+            scene.add(directionalLight);
+
+            const textureLoader = new THREE.TextureLoader();
+
+            let globe;
+            let cityMarkers = [];
+            let cityLabels = [];
+
+            function createGlobe() {
+                const globeGeometry = new THREE.SphereGeometry(1, 64, 64);
+                const globeMaterial = new THREE.MeshPhongMaterial();
+                globe = new THREE.Mesh(globeGeometry, globeMaterial);
+                scene.add(globe);
+
+                window.globe = globe;
+                addCityLabels();
+                updateGlobeTexture();
+            }
+
+            const monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+            function updateGlobeTexture() {
+                if (!globe) return;
+
+                const month = parseInt(document.getElementById('month-select').value);
+                const monthName = monthNames[month - 1];
+                const texturePath = `textures/${monthName}.jpg`;
+
+                textureLoader.load(texturePath,
+                    (texture) => {
+                        if (globe.material.map) globe.material.map.dispose();
+                        globe.material.map = texture;
+                        globe.material.needsUpdate = true;
+                    },
+                    undefined,
+                    (error) => {
+                        console.error('An error occurred loading the texture:', error);
+
+                        textureLoader.load('textures/september.jpg', (defaultTexture) => {
+                            if (globe.material.map) globe.material.map.dispose();
+                            globe.material.map = defaultTexture;
+                            globe.material.needsUpdate = true;
+                        });
+                    }
+                );
+            }
+
+            function createTextLabel(message) {
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+
+                const fontSize = 100;
+                context.font = `Bold ${fontSize}px Arial`;
+
+                const metrics = context.measureText(message);
+                const textWidth = metrics.width;
+
+                const textHeight = fontSize;
+                const canvasHeight = textHeight + 30;
+
+                canvas.width = textWidth + 4;
+                canvas.height = canvasHeight;
+
+                context.font = `Bold ${fontSize}px Arial`;
+
+                context.strokeStyle = 'rgba(0, 0, 0, 1.0)';
+                context.lineWidth = 30;
+                context.strokeText(message, 2, fontSize);
+
+                context.fillStyle = 'rgba(255, 255, 255, 1.0)';
+
+                context.fillText(message, 2, fontSize);
+
+                const texture = new THREE.CanvasTexture(canvas);
+
+                const material = new THREE.MeshBasicMaterial({
+                    map: texture,
+                    transparent: true,
+                    side: THREE.DoubleSide
+                });
+                const geometry = new THREE.PlaneGeometry(canvas.width / canvas.height, 1);
+
+                const label = new THREE.Mesh(geometry, material);
+
+                label.scale.set(0.0075, 0.0075, 0.0075);
+
+                return label;
+            }
+
+            const cities = [
+
+                { name: "București", lat: 44.4268, lon: 26.1025 },
+                { name: "Craiova", lat: 44.3300, lon: 23.7900 },
+                { name: "Cluj-Napoca", lat: 46.7700, lon: 23.6200 },
+                { name: "Timișoara", lat: 45.7600, lon: 21.2300 },
+                { name: "Suceava", lat: 47.6534, lon: 26.2570 },
+                { name: "Brașov", lat: 45.6583, lon: 25.6012 },
+                { name: "Constanța", lat: 44.1738, lon: 28.6253 },
+                { name: "Bacău", lat: 46.5667, lon: 26.9167 },
+                { name: "Satu Mare", lat: 47.7869, lon: 22.8792 },
+                { name: "Galați", lat: 45.4353, lon: 28.0079 },
+                { name: "Alba Iulia", lat: 46.0705, lon: 23.5588 },
+
+                { name: "Moscova", lat: 55.7558, lon: 37.6173 },
+                { name: "Belgrad", lat: 44.7872, lon: 20.4573 },
+                { name: "Sofia", lat: 42.6977, lon: 23.3219 },
+                { name: "Roma", lat: 41.9028, lon: 12.4964 },
+                { name: "Atena", lat: 37.9838, lon: 23.7275 },
+                { name: "Amsterdam", lat: 52.3676, lon: 4.9041 },
+                { name: "Paris", lat: 48.8566, lon: 2.3522 },
+                { name: "Londra", lat: 51.5074, lon: -0.1278 },
+                { name: "Bruxelles", lat: 50.8503, lon: 4.3517 },
+                { name: "Washington D.C.", lat: 38.9072, lon: -77.0369 },
+                { name: "Madrid", lat: 40.4168, lon: -3.7038 },
+                { name: "Tokyo", lat: 35.6895, lon: 139.6917 },
+                { name: "Teheran", lat: 35.6892, lon: 51.3890 },
+                { name: "Cairo", lat: 30.0444, lon: 31.2357 },
+                { name: "Luxemburg", lat: 49.6117, lon: 6.1319 },
+                { name: "Berna", lat: 46.9480, lon: 7.4474 },
+                { name: "Tirana", lat: 41.3275, lon: 19.8187 },
+                { name: "Stockholm", lat: 59.3293, lon: 18.0686 },
+                { name: "Copenhaga", lat: 55.6761, lon: 12.5683 },
+                { name: "Oslo", lat: 59.9139, lon: 10.7522 },
+                { name: "Lisabona", lat: 38.7223, lon: -9.1393 },
+                { name: "Praga", lat: 50.0755, lon: 14.4378 },
+                { name: "Varșovia", lat: 52.2297, lon: 21.0122 },
+                { name: "Helsinki", lat: 60.1699, lon: 24.9384 },
+                { name: "Viena", lat: 48.2082, lon: 16.3738 },
+                { name: "Budapesta", lat: 47.4979, lon: 19.0402 },
+                { name: "Ankara", lat: 39.9334, lon: 32.8597 },
+                { name: "Santiago", lat: -33.4489, lon: -70.6693 },
+                { name: "Havana", lat: 23.1136, lon: -82.3666 },
+                { name: "Brasília", lat: -15.7942, lon: -47.8825 },
+                { name: "Buenos Aires", lat: -34.6037, lon: -58.3816 },
+                { name: "Montevideo", lat: -34.9011, lon: -56.1645 },
+                { name: "Mexico", lat: 19.4326, lon: -99.1332 },
+                { name: "Caracas", lat: 10.4806, lon: -66.9036 },
+                { name: "Lima", lat: -12.0464, lon: -77.0428 },
+                { name: "Ierusalim", lat: 31.7683, lon: 35.2137 },
+                { name: "Pyongyang", lat: 39.0337, lon: 125.7547 },
+                { name: "New Delhi", lat: 28.6139, lon: 77.2090 },
+                { name: "Beijing", lat: 39.9042, lon: 116.4074 },
+                { name: "Hanoi", lat: 21.0278, lon: 105.8342 },
+                { name: "Jakarta", lat: -6.1754, lon: 106.8272 },
+                { name: "Ulaanbaatar", lat: 47.9212, lon: 106.9186 },
+                { name: "Damasc", lat: 33.5131, lon: 36.2919 },
+                { name: "Khartoum", lat: 15.5007, lon: 32.5599 },
+                { name: "Naypyidaw", lat: 19.7423, lon: 96.1219 },
+                { name: "Reykjavik", lat: 64.1265, lon: -21.8174 },
+                { name: "Addis Ababa", lat: 9.0054, lon: 38.7636 },
+                { name: "Sri Jayawardenepura Kotte", lat: 6.8920, lon: 79.9161 },
+                { name: "Sana'a", lat: 15.3694, lon: 44.1910 },
+                { name: "Kabul", lat: 34.5553, lon: 69.2075 },
+                { name: "Bagdad", lat: 33.3152, lon: 44.3661 },
+                { name: "Conakry", lat: 9.5092, lon: -13.7122 },
+                { name: "Nicosia", lat: 35.1856, lon: 33.3823 },
+                { name: "Bamako", lat: 12.6392, lon: -7.9994 },
+                { name: "Accra", lat: 5.6037, lon: -0.1870 },
+                { name: "Rabat", lat: 34.0209, lon: -6.8416 },
+                { name: "Alger", lat: 36.7538, lon: 3.0588 },
+                { name: "Porto-Novo", lat: 6.4965, lon: 2.6049 },
+                { name: "Vientiane", lat: 17.9749, lon: 102.6300 },
+                { name: "Phnom Penh", lat: 11.5564, lon: 104.9282 },
+                { name: "Kuweit", lat: 29.3759, lon: 47.9774 },
+                { name: "Tunis", lat: 36.8065, lon: 10.1815 },
+                { name: "Freetown", lat: 8.4844, lon: -13.2344 },
+                { name: "Dodoma", lat: -6.1754, lon: 35.7382 },
+                { name: "Islamabad", lat: 33.6844, lon: 73.0479 },
+                { name: "Nouakchott", lat: 18.0735, lon: -15.9582 },
+                { name: "Mogadishu", lat: 2.0469, lon: 45.3182 },
+                { name: "Kigali", lat: -1.9403, lon: 30.0594 },
+                { name: "Dakar", lat: 14.7167, lon: -17.4677 },
+                { name: "Brazzaville", lat: -4.2642, lon: 15.2831 },
+                { name: "Abuja", lat: 9.0765, lon: 7.3986 },
+                { name: "Berlin", lat: 52.5200, lon: 13.4050 },
+                { name: "Ottawa", lat: 45.4215, lon: -75.6972 },
+                { name: "Yamoussoukro", lat: 6.8206, lon: -5.2768 },
+                { name: "Singapore", lat: 1.3521, lon: 103.8198 },
+                { name: "Bogota", lat: 4.7110, lon: -74.0721 },
+                { name: "Bangui", lat: 4.3946, lon: 18.5582 },
+                { name: "Canberra", lat: -35.2809, lon: 149.1300 },
+                { name: "Ouagadougou", lat: 12.3714, lon: -1.5197 },
+                { name: "Kathmandu", lat: 27.7172, lon: 85.3240 },
+                { name: "Lusaka", lat: -15.3875, lon: 28.3228 },
+                { name: "Valletta", lat: 35.8989, lon: 14.5146 },
+                { name: "Nairobi", lat: -1.2921, lon: 36.8219 },
+                { name: "Gitega", lat: -3.4243, lon: 29.9242 },
+                { name: "Antananarivo", lat: -18.8792, lon: 47.5079 },
+                { name: "Quito", lat: -0.1807, lon: -78.4678 },
+                { name: "Kuala Lumpur", lat: 3.1390, lon: 101.6869 },
+                { name: "Kampala", lat: 0.3476, lon: 32.5825 },
+                { name: "Niamey", lat: 13.5116, lon: 2.1254 },
+                { name: "N'Djamena", lat: 12.1067, lon: 15.0444 },
+                { name: "Wellington", lat: -41.2865, lon: 174.7762 },
+                { name: "Sucre", lat: -19.0331, lon: -65.2627 },
+                { name: "Yaoundé", lat: 3.8480, lon: 11.5021 },
+                { name: "San José", lat: 9.9281, lon: -84.0907 },
+                { name: "Banjul", lat: 13.4549, lon: -16.5790 },
+                { name: "Panama", lat: 8.9824, lon: -79.5199 },
+                { name: "Gaborone", lat: -24.6583, lon: 25.0766 },
+                { name: "Manila", lat: 14.5995, lon: 120.9842 },
+                { name: "Malabo", lat: 3.7500, lon: 8.7833 },
+                { name: "Monrovia", lat: 6.3000, lon: -10.8000 },
+                { name: "Dhaka", lat: 23.8103, lon: 90.4125 },
+                { name: "Libreville", lat: 0.3920, lon: 9.4542 },
+                { name: "Port of Spain", lat: 10.6667, lon: -61.5167 },
+                { name: "Bangkok", lat: 13.7563, lon: 100.5018 },
+                { name: "Georgetown", lat: 6.8013, lon: -58.1551 },
+                { name: "Tegucigalpa", lat: 14.0723, lon: -87.1921 },
+                { name: "Bissau", lat: 11.8667, lon: -15.5833 },
+                { name: "Tripoli", lat: 32.8872, lon: 13.1913 },
+                { name: "Muscat", lat: 23.5859, lon: 58.4059 },
+                { name: "Port Louis", lat: -20.1652, lon: 57.4896 },
+                { name: "Kingston", lat: 17.9714, lon: -76.7936 },
+                { name: "Saint George's", lat: 12.0566, lon: -61.7489 },
+                { name: "Maseru", lat: -29.3100, lon: 27.4800 },
+                { name: "Maputo", lat: -25.9692, lon: 32.5732 },
+                { name: "Suva", lat: -18.1248, lon: 178.4501 },
+                { name: "Praia", lat: 14.9215, lon: -23.5117 },
+                { name: "Paramaribo", lat: 5.8520, lon: -55.2038 },
+                { name: "Luanda", lat: -8.8383, lon: 13.2344 },
+                { name: "Port Moresby", lat: -9.4438, lon: 147.1798 },
+                { name: "Victoria", lat: -4.6190, lon: 55.4518 },
+                { name: "Moroni", lat: -11.7000, lon: 43.2500 },
+                { name: "Djibouti", lat: 11.8251, lon: 42.5903 },
+                { name: "Managua", lat: 12.1147, lon: -86.2362 },
+                { name: "Malé", lat: 4.1750, lon: 73.5093 },
+                { name: "Castries", lat: 14.0100, lon: -60.9880 },
+                { name: "San Salvador", lat: 13.6929, lon: -89.2182 },
+                { name: "Harare", lat: -17.8252, lon: 31.0335 },
+                { name: "Port-au-Prince", lat: 18.5982, lon: -72.3070 },
+                { name: "Lilongwe", lat: -13.9626, lon: 33.7744 },
+                { name: "Abu Dhabi", lat: 24.4539, lon: 54.3773 },
+                { name: "Windhoek", lat: -22.5607, lon: 17.0725 },
+                { name: "Seul", lat: 37.5665, lon: 126.9780 },
+                { name: "Dublin", lat: 53.3498, lon: -6.2603 },
+                { name: "Doha", lat: 25.2854, lon: 51.5310 },
+                { name: "Guatemala", lat: 14.6349, lon: -90.5069 },
+                { name: "Chișinău", lat: 47.0167, lon: 28.8333 },
+                { name: "Riga", lat: 56.9496, lon: 24.1052 },
+                { name: "Vilnius", lat: 54.6872, lon: 25.2797 },
+                { name: "Pretoria", lat: -25.7479, lon: 28.2293 },
+                { name: "Erevan", lat: 40.1792, lon: 44.4991 },
+                { name: "Kiev", lat: 50.4501, lon: 30.5234 },
+                { name: "Minsk", lat: 53.9045, lon: 27.5615 },
+                { name: "Asunción", lat: -25.2637, lon: -57.5759 },
+                { name: "Bishkek", lat: 42.8746, lon: 74.5698 },
+                { name: "Baku", lat: 40.4093, lon: 49.8671 },
+                { name: "Tbilisi", lat: 41.7151, lon: 44.8271 },
+                { name: "Astana", lat: 51.1694, lon: 71.4491 },
+                { name: "Dușanbe", lat: 38.5598, lon: 68.7870 },
+                { name: "Așgabat", lat: 37.9602, lon: 58.3260 },
+                { name: "Zagreb", lat: 45.8150, lon: 15.9819 },
+                { name: "Belmopan", lat: 17.2500, lon: -88.7667 },
+                { name: "Asmara", lat: 15.3229, lon: 38.9248 },
+                { name: "Bandar Seri Begawan", lat: 4.9031, lon: 114.9398 },
+                { name: "Riad", lat: 24.7136, lon: 46.6753 },
+                { name: "Tașkent", lat: 41.2995, lon: 69.2401 },
+                { name: "Sarajevo", lat: 43.8563, lon: 18.4131 },
+                { name: "Dili", lat: -8.5586, lon: 125.5898 },
+                { name: "Kingstown", lat: 13.1560, lon: -61.2241 },
+                { name: "Apia", lat: -13.8333, lon: -171.7667 },
+                { name: "Podgorica", lat: 42.4304, lon: 19.2594 },
+                { name: "Nassau", lat: 25.0477, lon: -77.3554 },
+                { name: "Roseau", lat: 15.2975, lon: -61.3879 },
+                { name: "Honiara", lat: -9.4333, lon: 159.9500 },
+                { name: "Juba", lat: 4.8500, lon: 31.6000 },
+                { name: "Ngerulmud", lat: 7.5000, lon: 134.6200 },
+                { name: "Port Vila", lat: -17.7333, lon: 168.3250 },
+                { name: "Palikir", lat: 6.9172, lon: 158.1530 },
+                { name: "Nuku'alofa", lat: -21.1396, lon: -175.2078 },
+                { name: "Saint John's", lat: 17.1189, lon: -61.8450 },
+                { name: "Tarawa de Sud", lat: 1.3298, lon: 172.9788 },
+
+                { name: "Bălți", lat: 47.7667, lon: 27.9167 },
+                { name: "Ushuaia", lat: -54.8019, lon: -68.3030 },
+                { name: "Stanley", lat: -51.6967, lon: -57.8520 },
+                { name: "Nuuk", lat: 64.1835, lon: -51.7216 },
+                { name: "Vladivostok", lat: 43.1167, lon: 131.8833 },
+                { name: "Volgograd", lat: 48.7000, lon: 44.5167 },
+                { name: "Sevastopol", lat: 44.6000, lon: 33.5167 },
+                { name: "Novosibirsk", lat: 55.0333, lon: 82.9000 },
+                { name: "Ekaterinburg", lat: 56.8519, lon: 60.6122 },
+                { name: "Sankt Petersburg", lat: 59.9343, lon: 30.3351 },
+                { name: "Arhanghelsk", lat: 64.5398, lon: 40.5404 },
+                { name: "Murmansk", lat: 68.9667, lon: 33.0833 },
+                { name: "Urumqi", lat: 43.8256, lon: 87.6169 },
+                { name: "Harbin", lat: 45.7500, lon: 126.6333 },
+                { name: "Lhasa", lat: 29.6500, lon: 91.1333 },
+                { name: "Hong Kong", lat: 22.2855, lon: 114.1577 },
+                { name: "Shanghai", lat: 31.2304, lon: 121.4737 },
+                { name: "Qingdao", lat: 36.0667, lon: 120.3833 },
+                { name: "Chongqing", lat: 29.5630, lon: 106.5516 },
+                { name: "Zhengzhou", lat: 34.7466, lon: 113.6253 },
+                { name: "Lanzhou", lat: 36.0569, lon: 103.7928 },
+                { name: "Mumbai", lat: 19.0760, lon: 72.8777 },
+                { name: "Visakhapatnam", lat: 17.6868, lon: 83.2185 },
+                { name: "Montgomery", lat: 32.3615, lon: -86.2791 },
+                { name: "Juneau", lat: 58.3019, lon: -134.4197 },
+                { name: "Phoenix", lat: 33.4484, lon: -112.0739 },
+                { name: "Little Rock", lat: 34.7360, lon: -92.3311 },
+                { name: "Sacramento", lat: 38.5816, lon: -121.4944 },
+                { name: "Denver", lat: 39.7392, lon: -104.9903 },
+                { name: "Hartford", lat: 41.7658, lon: -72.6734 },
+                { name: "Tallahassee", lat: 30.4383, lon: -84.2807 },
+                { name: "Atlanta", lat: 33.7490, lon: -84.3880 },
+                { name: "Honolulu", lat: 21.3099, lon: -157.8647 },
+                { name: "Boise", lat: 43.6187, lon: -116.2140 },
+                { name: "Springfield", lat: 39.7817, lon: -89.6501 },
+                { name: "Indianapolis", lat: 39.7684, lon: -86.1581 },
+                { name: "Des Moines", lat: 41.6005, lon: -93.6091 },
+                { name: "Topeka", lat: 39.0473, lon: -95.6753 },
+                { name: "Frankfort", lat: 38.1979, lon: -84.8709 },
+                { name: "Baton Rouge", lat: 30.4515, lon: -91.1871 },
+                { name: "Augusta", lat: 44.3106, lon: -69.7795 },
+                { name: "Lansing", lat: 42.7325, lon: -84.5555 },
+                { name: "Saint Paul", lat: 44.9537, lon: -93.0900 },
+                { name: "Jackson", lat: 32.2988, lon: -90.1848 },
+                { name: "Jefferson City", lat: 38.5767, lon: -92.1735 },
+                { name: "Helena", lat: 46.5928, lon: -112.0361 },
+                { name: "Lincoln", lat: 40.8136, lon: -96.7026 },
+                { name: "Carson City", lat: 39.1638, lon: -119.7674 },
+                { name: "Concord", lat: 43.2084, lon: -71.5375 },
+                { name: "Trenton", lat: 40.2206, lon: -74.7667 },
+                { name: "Santa Fe", lat: 35.6870, lon: -105.9378 },
+                { name: "Raleigh", lat: 35.7796, lon: -78.6382 },
+                { name: "Bismarck", lat: 46.8083, lon: -100.7837 },
+                { name: "Columbus", lat: 39.9612, lon: -82.9988 },
+                { name: "Oklahoma City", lat: 35.4676, lon: -97.5164 },
+                { name: "Salem", lat: 44.9429, lon: -123.0351 },
+                { name: "Columbia", lat: 34.0007, lon: -81.0348 },
+                { name: "Pierre", lat: 44.3683, lon: -100.3510 },
+                { name: "Nashville", lat: 36.1627, lon: -86.7816 },
+                { name: "Austin", lat: 30.2672, lon: -97.7431 },
+                { name: "Salt Lake City", lat: 40.7608, lon: -111.8910 },
+                { name: "Richmond", lat: 37.5407, lon: -77.4360 },
+                { name: "Olympia", lat: 47.0379, lon: -122.9007 },
+                { name: "Charleston", lat: 38.3498, lon: -81.6326 },
+                { name: "Madison", lat: 43.0731, lon: -89.4012 },
+                { name: "Cheyenne", lat: 41.1399, lon: -104.8202 }
+            ];
+
+            function addCityLabels() {
+
+                const markerGeometry = new THREE.SphereGeometry(0.0012, 16, 16);
+                const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+                cities.forEach(city => {
+                    const lat = city.lat;
+                    const lon = city.lon;
+
+                    const phi = (90 - lat) * Math.PI / 180;
+                    const theta = (lon + 180) * Math.PI / 180;
+
+                    const x = -(Math.sin(phi) * Math.cos(theta));
+                    const y = Math.cos(phi);
+                    const z = Math.sin(phi) * Math.sin(theta);
+
+                    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+                    marker.position.set(x, y, z);
+                    marker.name = city.name;
+                    marker.userData = { city: city };
+                    globe.add(marker);
+                    cityMarkers.push(marker);
+
+                    const label = createTextLabel(city.name);
+                    label.userData = { city: city };
+
+                    const group = new THREE.Group();
+                    group.position.set(x, y, z);
+
+                    label.position.set(0, 0.006, 0);
+
+                    group.lookAt(group.position.clone().multiplyScalar(2));
+
+                    group.add(label);
+                    globe.add(group);
+
+                    cityLabels.push(group);
+                });
+            }
+
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            let isWeatherOverlayVisible = false;
+
+            async function onMouseClick(event) {
+
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+
+                const isVisible = camera.position.z <= 1.25;
+
+                const overlay = document.getElementById('weather-details-overlay');
+                const loadingMessage = document.getElementById('loading-message');
+
+                if (isVisible) {
+                    const interactiveObjects = [...cityMarkers, ...cityLabels.flatMap(group => group.children)];
+                    const intersects = raycaster.intersectObjects(interactiveObjects);
+
+                    if (intersects.length > 0) {
+                        const intersectedObject = intersects[0].object;
+                        const cityData = intersectedObject.userData.city;
+
+                        if (!cityData) return;
+
+                        const cityName = cityData.name;
+                        const selectedDate = window.getSelectedDate();
+
+                        loadingMessage.style.display = 'block';
+                        overlay.style.display = 'block';
+                        isWeatherOverlayVisible = true;
+
+                        try {
+                            const response = await fetch(`/get_weather?city=${encodeURIComponent(cityName)}&date=${encodeURIComponent(selectedDate)}`);
+                            const data = await response.json();
+
+                            loadingMessage.style.display = 'none';
+
+                            if (response.ok) {
+                                document.getElementById('city-name-display').textContent = data.city;
+                                document.getElementById('date-display').textContent = data.date;
+                                document.getElementById('temp-display').textContent = `${data.avg_temperature}°C`;
+                                document.getElementById('humidity-display').textContent = `${data.avg_humidity}%`;
+                                document.getElementById('condition-display').textContent = data.weather_condition;
+
+                                window.currentLat  = parseFloat(cityData.lat);
+                                window.currentLon  = parseFloat(cityData.lon);
+                                window.currentCity = cityName;
+                                document.getElementById('graph-toggle-btn').disabled = false;
+                                document.getElementById('graph-no-city-hint').style.display = 'none';
+                            } else {
+                                document.getElementById('city-name-display').textContent = "Error";
+                                document.getElementById('date-display').textContent = "";
+                                document.getElementById('temp-display').textContent = data.error || "Unknown error.";
+                                document.getElementById('humidity-display').textContent = "";
+                                document.getElementById('condition-display').textContent = "";
+                            }
+                        } catch (error) {
+                            console.error('Fetch error:', error);
+                            loadingMessage.style.display = 'none';
+                            document.getElementById('city-name-display').textContent = "Connection Error";
+                            document.getElementById('date-display').textContent = "";
+                            document.getElementById('temp-display').textContent = "Could not connect to server.";
+                            document.getElementById('humidity-display').textContent = "";
+                            document.getElementById('condition-display').textContent = "";
+                        }
+                    }
+                } else {
+
+                }
+            }
+
+            document.getElementById('close-btn').addEventListener('click', () => {
+                document.getElementById('weather-details-overlay').style.display = 'none';
+                isWeatherOverlayVisible = false;
+            });
+
+            document.addEventListener('click', (e) => {
+
+                const uiIds = ['date-selector-overlay','weather-details-overlay',
+                               'graph-widget','graph-toggle-btn','graph-controls',
+                               'graph-chart-wrap','graph-show-btn'];
+                const inUI = uiIds.some(id => {
+                    const el = document.getElementById(id);
+                    return el && el.contains(e.target);
+                });
+                if (!inUI) onMouseClick(e);
+            }, false);
+
+            let isDragging = false;
+            let previousMousePosition = {
+                x: 0,
+                y: 0
+            };
+
+            document.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition.x = e.clientX;
+                previousMousePosition.y = e.clientY;
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging || !globe) return;
+
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+
+                globe.rotation.y += deltaX * 0.005;
+                globe.rotation.x += deltaY * 0.005;
+
+                previousMousePosition.x = e.clientX;
+                previousMousePosition.y = e.clientY;
+            });
+
+            document.addEventListener('wheel', (e) => {
+                if (!globe) return;
+
+                const zoomFactor = e.deltaY * 0.001;
+                camera.position.z += zoomFactor;
+
+                camera.position.z = Math.max(1.15, Math.min(camera.position.z, 2));
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            const animate = function() {
+                requestAnimationFrame(animate);
+
+                const isVisible = camera.position.z <= 1.25;
+
+                cityMarkers.forEach(marker => {
+                    marker.visible = isVisible;
+                });
+
+                cityLabels.forEach(label => {
+                    label.visible = isVisible;
+                });
+
+                renderer.render(scene, camera);
+            };
+
+            const yearSelect = document.getElementById('year-select');
+            const monthSelect = document.getElementById('month-select');
+            const daySelect = document.getElementById('day-select');
+
+            for (let i = 2000; i <= 2025; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                yearSelect.appendChild(option);
+            }
+
+            for (let i = 1; i <= 12; i++) {
+                const option = document.createElement('option');
+                option.value = i.toString().padStart(2, '0');
+                option.textContent = i.toString().padStart(2, '0');
+                monthSelect.appendChild(option);
+            }
+
+            function getDaysInMonth(year, month) {
+                return new Date(year, month, 0).getDate();
+            }
+
+            function updateDays() {
+                const year = parseInt(yearSelect.value);
+                const month = parseInt(monthSelect.value);
+                const daysInMonth = getDaysInMonth(year, month);
+                const currentDay = daySelect.value;
+
+                daySelect.innerHTML = '';
+
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const option = document.createElement('option');
+                    option.value = i.toString().padStart(2, '0');
+                    option.textContent = i.toString().padStart(2, '0');
+                    daySelect.appendChild(option);
+                }
+
+                if (parseInt(currentDay) <= daysInMonth) {
+                    daySelect.value = currentDay;
+                } else {
+                    daySelect.value = '01';
+                }
+            }
+
+            yearSelect.addEventListener('change', updateDays);
+            monthSelect.addEventListener('change', updateDays);
+
+            monthSelect.addEventListener('change', updateGlobeTexture);
+
+            updateDays();
+            createGlobe();
+
+            function getSelectedDate() {
+                const year = yearSelect.value;
+                const month = monthSelect.value;
+                const day = daySelect.value;
+                return `${year}-${month}-${day}`;
+            }
+
+            window.getSelectedDate = getSelectedDate;
+
+            animate();
+
+        })();
+    </script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <script>
+
+    let _graphChart  = null;
+    let _graphMetric = 'temperature';
+    let _lastFetchData = null;
+
+    function graphToggle() {
+      const widget    = document.getElementById('graph-widget');
+      const isOpening = !widget.classList.contains('open');
+      widget.classList.toggle('open');
+      if (!isOpening) {
+        document.getElementById('graph-chart-wrap').classList.remove('visible');
+        if (_graphChart) { _graphChart.destroy(); _graphChart = null; }
+        _lastFetchData = null;
+      }
+    }
+
+    function graphCalcStart(endStr, periodYears) {
+
+      const end   = new Date(endStr + 'T12:00:00');
+      const y     = end.getFullYear() - Math.floor(periodYears);
+      const m     = end.getMonth() - Math.round((periodYears % 1) * 12);
+      const start = new Date(y, m, end.getDate(), 12, 0, 0);
+      const pad   = n => String(n).padStart(2, '0');
+      return `${start.getFullYear()}-${pad(start.getMonth()+1)}-${pad(start.getDate())}`;
+    }
+
+    function graphSetMetric(metric, btn) {
+      _graphMetric = metric;
+      document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (_lastFetchData) _graphRender(_lastFetchData);
+    }
+
+    function graphBuildTargetDates(endStr, periodYrs) {
+      const end      = new Date(endStr + 'T12:00:00');
+      const selMonth = end.getMonth();
+      const selDay   = end.getDate();
+      const endMs    = end.getTime();
+
+      const pad = n => String(n).padStart(2, '0');
+
+      const makeDate = (y, m, d) => {
+        const maxDay = new Date(y, m + 1, 0).getDate();
+        const safeD  = Math.min(d, maxDay);
+        return `${y}-${pad(m + 1)}-${pad(safeD)}`;
+      };
+
+      const notAfterEnd = ds => new Date(ds + 'T12:00:00').getTime() <= endMs;
+
+      const raw = [];
+
+      if (periodYrs === 1) {
+
+        const partnerDay = selDay <= 15 ? selDay + 15 : selDay - 15;
+
+        for (let mOff = 11; mOff >= 0; mOff--) {
+          let m = selMonth - mOff;
+          let y = end.getFullYear();
+          if (m < 0) { m += 12; y -= 1; }
+
+          const primary = makeDate(y, m, selDay);
+          const partner = makeDate(y, m, partnerDay);
+
+          if (selDay <= 15) {
+            raw.push(primary);
+            if (partner !== primary) raw.push(partner);
+          } else {
+            if (partner !== primary) raw.push(partner);
+            raw.push(primary);
+          }
+        }
+
+      } else if (periodYrs === 5) {
+        for (let yOff = 4; yOff >= 0; yOff--) {
+          const baseY = end.getFullYear() - yOff;
+          for (let mOff = 0; mOff < 12; mOff++) {
+            let m = selMonth + mOff;
+            let y = baseY + Math.floor(m / 12);
+            m = m % 12;
+            const ds = makeDate(y, m, selDay);
+            if (notAfterEnd(ds)) raw.push(ds);
+          }
+        }
+
+      } else if (periodYrs === 10) {
+        for (let yOff = 9; yOff >= 0; yOff--) {
+          const baseY = end.getFullYear() - yOff;
+          for (const mOff of [0, 3, 6, 9]) {
+            let m = selMonth + mOff;
+            let y = baseY + Math.floor(m / 12);
+            m = m % 12;
+            const ds = makeDate(y, m, selDay);
+            if (notAfterEnd(ds)) raw.push(ds);
+          }
+        }
+
+      } else if (periodYrs === 25) {
+        for (let yOff = 24; yOff >= 0; yOff--) {
+          const baseY = end.getFullYear() - yOff;
+          for (const mOff of [0, 6]) {
+            let m = selMonth + mOff;
+            let y = baseY + Math.floor(m / 12);
+            m = m % 12;
+            const ds = makeDate(y, m, selDay);
+            if (notAfterEnd(ds)) raw.push(ds);
+          }
+        }
+
+      } else if (periodYrs === 50) {
+        for (let yOff = periodYrs - 1; yOff >= 0; yOff--) {
+          raw.push(makeDate(end.getFullYear() - yOff, selMonth, selDay));
+        }
+      }
+
+      const seen = new Set();
+      const dates = [];
+      for (const d of raw) {
+        if (!seen.has(d)) { seen.add(d); dates.push(d); }
+      }
+
+      return dates.length > 0 ? dates : null;
+    }
+
+    function graphFilterToTargets(rawLabels, rawTemps, rawHumidity, targets, strict) {
+      const lookup = {};
+      rawLabels.forEach((lbl, i) => { lookup[lbl] = i; });
+
+      const usedIndices = new Set();
+      const outLabels = [], outTemps = [], outHum = [];
+
+      targets.forEach(t => {
+        if (lookup[t] !== undefined) {
+          const i = lookup[t];
+          if (!usedIndices.has(i)) {
+            usedIndices.add(i);
+            outLabels.push(rawLabels[i]);
+            outTemps.push(rawTemps[i]);
+            outHum.push(rawHumidity[i]);
+          }
+        } else if (!strict) {
+
+          const tTime = new Date(t + 'T12:00:00').getTime();
+          let best = -1, bestDiff = Infinity;
+          rawLabels.forEach((lbl, i) => {
+            if (usedIndices.has(i)) return;
+            const diff = Math.abs(new Date(lbl + 'T12:00:00').getTime() - tTime);
+            if (diff < bestDiff) { bestDiff = diff; best = i; }
+          });
+          if (best !== -1) {
+            usedIndices.add(best);
+            outLabels.push(rawLabels[best]);
+            outTemps.push(rawTemps[best]);
+            outHum.push(rawHumidity[best]);
+          }
+        }
+
+      });
+
+      return { labels: outLabels, temperature: outTemps, humidity: outHum };
+    }
+
+    async function graphShow() {
+      const endDate   = window.getSelectedDate();
+      const periodYrs = parseFloat(document.getElementById('graph-period').value);
+      const startDate = graphCalcStart(endDate, periodYrs);
+      const city      = window.currentCity || '';
+      const lat       = window.currentLat  ?? 46.07;
+      const lon       = window.currentLon  ?? 23.57;
+
+      const wrap    = document.getElementById('graph-chart-wrap');
+      const loading = document.getElementById('graph-loading');
+      const canvas  = document.getElementById('graph-canvas');
+
+      wrap.classList.add('visible');
+      loading.style.display = 'block';
+      canvas.style.display  = 'none';
+      if (_graphChart) { _graphChart.destroy(); _graphChart = null; }
+
+      const pts = Math.max(400, Math.ceil(periodYrs * 370));
+      let raw;
+      try {
+        const url = `/api/climate-history?lat=${lat}&lon=${lon}&start=${startDate}&end=${endDate}&points=${pts}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+        raw = await resp.json();
+        if (raw.error) throw new Error(raw.error);
+      } catch (err) {
+        loading.style.display = 'none';
+        alert('Could not load climate data: ' + err.message);
+        return;
+      }
+
+      const targets = graphBuildTargetDates(endDate, periodYrs);
+      let data;
+      if (targets) {
+        const strict   = (periodYrs === 50);
+        const filtered = graphFilterToTargets(raw.labels, raw.temperature, raw.humidity, targets, strict);
+        data = { labels: filtered.labels, temperature: filtered.temperature, humidity: filtered.humidity };
+      } else {
+        data = raw;
+      }
+
+      data._startDate = startDate;
+      data._endDate   = endDate;
+      data._city      = city;
+      _lastFetchData  = data;
+
+      loading.style.display = 'none';
+      canvas.style.display  = 'block';
+      _graphRender(data);
+    }
+
+    function _graphRender(data) {
+      const canvas = document.getElementById('graph-canvas');
+      if (_graphChart) { _graphChart.destroy(); _graphChart = null; }
+
+      const isTemp    = (_graphMetric === 'temperature');
+      const values    = isTemp ? data.temperature : data.humidity;
+      const unit      = isTemp ? '°C' : '%';
+      const color     = isTemp ? '#38bdf8' : '#34d399';
+      const fillCol   = isTemp ? 'rgba(56,189,248,0.10)' : 'rgba(52,211,153,0.10)';
+      const metricLbl = isTemp ? 'Max Temp' : 'Humidity';
+      const yTick     = isTemp ? (v => v + '°') : (v => v + '%');
+      const tipLabel  = isTemp ? (i => ` ${i.raw.toFixed(1)} °C`) : (i => ` ${i.raw.toFixed(1)} %`);
+
+      const cityPart = data._city ? ` · ${data._city}` : '';
+      document.getElementById('graph-chart-title').textContent =
+        `${metricLbl}${cityPart} · ${data._startDate} → ${data._endDate}`;
+
+      const ptRadius      = data.labels.length <= 30 ? 4 : 3;
+      const ptHoverRadius = ptRadius + 3;
+
+      _graphChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            label: metricLbl,
+            data:  values,
+            borderColor:          color,
+            backgroundColor:      fillCol,
+            borderWidth: 2,
+            pointRadius:          ptRadius,
+            pointHoverRadius:     ptHoverRadius,
+            pointBackgroundColor: color,
+            fill: true,
+            tension: 0,
+          }]
+        },
+        options: {
+          responsive:          true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(15,23,42,0.92)',
+              borderColor:     'rgba(255,255,255,0.1)',
+              borderWidth: 1,
+              titleColor: '#94a3b8',
+              bodyColor:  '#e2e8f0',
+              callbacks: {
+                title: (items) => data.labels[items[0].dataIndex],
+                label: tipLabel,
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid:   { color: 'rgba(255,255,255,0.05)' },
+              ticks:  {
+                color: '#64748b',
+                font:  { size: 10 },
+                maxRotation: 45,
+                minRotation: 0,
+                autoSkip:      true,
+                maxTicksLimit: 24,
+              },
+              border: { display: false }
+            },
+            y: {
+              grid:   { color: 'rgba(255,255,255,0.05)' },
+              ticks:  { color: '#64748b', font: { size: 10 }, callback: yTick },
+              border: { display: false }
+            }
+          }
+        }
+      });
+    }
+
+    </script>
+
+    <button id="ai-open-btn" onclick="aiOpen()" title="Scenariu de împădurire AI">
+       Predicție AI
+    </button>
+
+    <div id="ai-overlay">
+      <div id="ai-panel">
+        <span id="ai-close-btn" onclick="aiClose()">&times;</span>
+        <h2 id="ai-title">Predictor Climatic pentru Împăduriri / Despăduriri</h2>
+        <p id="ai-subtitle">
+          Întreabă în română sau engleză. Exemplu:
+          <em>„plantez 1000 hectare de fag in Apuseni pentru 10 ani"</em>
+        </p>
+
+        <div id="ai-input-row">
+          <textarea id="ai-input" rows="2"
+            placeholder="ex: plantez 1000 ha de fag in Apuseni pentru 10 ani"></textarea>
+          <button id="ai-run-btn" onclick="aiRun()">Predicție</button>
+        </div>
+
+        <div id="ai-loading" style="display:none;">
+          <span class="ai-spinner"></span> Se procesează… (AI local, ~10s)
+        </div>
+
+        <div id="ai-result" style="display:none;">
+          <div id="ai-summary"></div>
+
+          <div id="ai-badge-row">
+            <span id="ai-effect-badge"></span>
+            <span id="ai-baseline-note"></span>
+          </div>
+
+          <div id="ai-metric-toggle">
+            <button class="ai-metric-btn active" onclick="aiSetMetric('temperature', this)">🌡 Temperatură</button>
+            <button class="ai-metric-btn"        onclick="aiSetMetric('humidity', this)">💧 Umiditate</button>
+          </div>
+
+          <div id="ai-chart-wrap">
+            <canvas id="ai-canvas"></canvas>
+          </div>
+
+        </div>
+
+        <div id="ai-refusal" style="display:none;"></div>
+      </div>
+    </div>
+
+    <style>
+      #ai-open-btn {
+        position: fixed; bottom: 20px; left: 20px; z-index: 50;
+        background: #166534; color: #ecfdf5; border: 1px solid #22c55e;
+        border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+        cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+        transition: background .15s;
+      }
+      #ai-open-btn:hover { background: #15803d; }
+      #ai-overlay {
+        display: none; position: fixed; inset: 0; z-index: 100;
+        background: rgba(2,6,23,0.72); backdrop-filter: blur(3px);
+        align-items: center; justify-content: center;
+      }
+      #ai-overlay.visible { display: flex; }
+      #ai-panel {
+        position: relative; width: min(680px, 92vw); max-height: 88vh; overflow-y: auto;
+        background: #0f172a; border: 1px solid rgba(148,163,184,0.2);
+        border-radius: 16px; padding: 26px 28px; color: #e2e8f0;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      #ai-close-btn {
+        position: absolute; top: 14px; right: 18px; font-size: 26px;
+        color: #64748b; cursor: pointer; line-height: 1;
+      }
+      #ai-close-btn:hover { color: #e2e8f0; }
+      #ai-title { margin: 0 0 4px; font-size: 20px; color: #f1f5f9; }
+      #ai-subtitle { margin: 0 0 16px; font-size: 13px; color: #94a3b8; }
+      #ai-subtitle em { color: #7dd3fc; font-style: italic; }
+      #ai-input-row { display: flex; gap: 10px; align-items: stretch; }
+      #ai-input {
+        flex: 1; resize: vertical; background: #1e293b; color: #e2e8f0;
+        border: 1px solid rgba(148,163,184,0.25); border-radius: 8px;
+        padding: 10px 12px; font-size: 14px; font-family: inherit;
+      }
+      #ai-input:focus { outline: none; border-color: #38bdf8; }
+      #ai-run-btn {
+        background: #0ea5e9; color: #04223a; border: none; border-radius: 8px;
+        padding: 0 20px; font-size: 14px; font-weight: 700; cursor: pointer;
+        transition: background .15s;
+      }
+      #ai-run-btn:hover { background: #38bdf8; }
+      #ai-run-btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+      #ai-loading { margin-top: 16px; font-size: 14px; color: #94a3b8; }
+      .ai-spinner {
+        display: inline-block; width: 13px; height: 13px; vertical-align: middle;
+        border: 2px solid rgba(148,163,184,0.3); border-top-color: #38bdf8;
+        border-radius: 50%; animation: ai-spin 0.8s linear infinite; margin-right: 6px;
+      }
+      @keyframes ai-spin { to { transform: rotate(360deg); } }
+      #ai-result { margin-top: 18px; }
+      #ai-summary {
+        font-size: 15px; color: #f1f5f9; line-height: 1.45; margin-bottom: 12px;
+        padding: 12px 14px; background: rgba(56,189,248,0.08);
+        border-left: 3px solid #38bdf8; border-radius: 6px;
+      }
+      #ai-badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+      #ai-effect-badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
+      .ai-badge-negligible { background: #422006; color: #fbbf24; border: 1px solid #b45309; }
+      .ai-badge-detectable { background: #052e16; color: #4ade80; border: 1px solid #16a34a; }
+      #ai-baseline-note { font-size: 12px; color: #94a3b8; }
+      #ai-metric-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+      .ai-metric-btn {
+        background: #1e293b; color: #94a3b8; border: 1px solid rgba(148,163,184,0.2);
+        border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+      }
+      .ai-metric-btn.active { background: #0ea5e9; color: #04223a; font-weight: 700; border-color: #0ea5e9; }
+      #ai-chart-wrap { position: relative; height: 280px; margin-bottom: 14px; }
+      #ai-notes { font-size: 12px; color: #cbd5e1; margin-bottom: 8px; }
+      #ai-notes ul { margin: 6px 0 0; padding-left: 18px; }
+      #ai-notes li { margin-bottom: 3px; }
+      #ai-sources { font-size: 11px; color: #64748b; border-top: 1px solid rgba(148,163,184,0.12); padding-top: 8px; }
+      #ai-refusal {
+        margin-top: 18px; font-size: 15px; color: #fca5a5; line-height: 1.45;
+        padding: 14px 16px; background: rgba(248,113,113,0.08);
+        border-left: 3px solid #f87171; border-radius: 6px;
+      }
+    </style>
+
+    <script>
+
+    let _aiChart   = null;
+    let _aiData    = null;
+    let _aiMetric  = 'temperature';
+
+    function aiOpen()  { document.getElementById('ai-overlay').classList.add('visible'); }
+    function aiClose() { document.getElementById('ai-overlay').classList.remove('visible'); }
+
+    document.getElementById('ai-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'ai-overlay') aiClose();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') aiClose();
+    });
+
+    async function aiRun() {
+      const text = document.getElementById('ai-input').value.trim();
+      if (!text) return;
+
+      const runBtn  = document.getElementById('ai-run-btn');
+      const loading = document.getElementById('ai-loading');
+      const result  = document.getElementById('ai-result');
+      const refusal = document.getElementById('ai-refusal');
+
+      runBtn.disabled = true;
+      loading.style.display = 'block';
+      result.style.display  = 'none';
+      refusal.style.display = 'none';
+
+      const payload = { text };
+      if (window.currentLat != null && window.currentLon != null) {
+        payload.lat = window.currentLat;
+        payload.lon = window.currentLon;
+      }
+
+      let data;
+      try {
+        const resp = await fetch('/api/forestation-scenario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        data = await resp.json();
+      } catch (err) {
+        loading.style.display = 'none';
+        runBtn.disabled = false;
+        refusal.textContent = 'Nu s-a putut contacta serverul de predicție: ' + err.message;
+        refusal.style.display = 'block';
+        return;
+      }
+
+      loading.style.display = 'none';
+      runBtn.disabled = false;
+
+      if (!data.ok) {
+        refusal.textContent = data.refusal || data.error || 'Scenario could not be processed.';
+        refusal.style.display = 'block';
+        return;
+      }
+
+      _aiData = data;
+      aiRenderResult(data);
+      result.style.display = 'block';
+    }
+
+    function aiRenderResult(data) {
+      const lang = data.user_lang || 'en';
+
+      document.getElementById('ai-summary').textContent = data.summary;
+
+      const badge = document.getElementById('ai-effect-badge');
+      const negligible = data.effect_summary && data.effect_summary.negligible;
+      if (negligible) {
+        badge.className = 'ai-badge-negligible';
+        badge.textContent = 'Efect neglijabil (sub variabilitatea naturală)';
+      } else {
+        badge.className = 'ai-badge-detectable';
+        badge.textContent = 'Efect detectabil';
+      }
+
+      const bt = data.baseline.mean_temp_c, bh = data.baseline.mean_humidity_pct;
+      document.getElementById('ai-baseline-note').textContent = `Bază: ${bt}°C, ${bh}% umiditate`;
+
+      const notesEl = document.getElementById('ai-notes');
+      if (notesEl) notesEl.innerHTML = '';
+      const srcEl = document.getElementById('ai-sources');
+      if (srcEl) srcEl.innerHTML = '';
+
+      const mcNote = data.uncertainty && data.uncertainty.negligible_note;
+      let mcNoteEl = document.getElementById('ai-mc-note');
+      if (!mcNoteEl) {
+        mcNoteEl = document.createElement('div');
+        mcNoteEl.id = 'ai-mc-note';
+        mcNoteEl.style.cssText = [
+          'font-size:12px','color:#fcd34d','margin:0 0 12px',
+          'padding:7px 12px','background:rgba(251,191,36,0.07)',
+          'border-left:3px solid #f59e0b','border-radius:6px','line-height:1.4'
+        ].join(';');
+        document.getElementById('ai-badge-row').insertAdjacentElement('afterend', mcNoteEl);
+      }
+      mcNoteEl.textContent = mcNote || '';
+      mcNoteEl.style.display = mcNote ? 'block' : 'none';
+
+      aiRenderChart();
+    }
+
+    function aiSetMetric(metric, btn) {
+      _aiMetric = metric;
+      document.querySelectorAll('.ai-metric-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      aiRenderChart();
+    }
+
+    function aiRenderChart() {
+      if (!_aiData) return;
+      const canvas = document.getElementById('ai-canvas');
+      if (_aiChart) { _aiChart.destroy(); _aiChart = null; }
+
+      const lang   = _aiData.user_lang || 'en';
+      const s      = _aiData.series;
+      const isTemp = (_aiMetric === 'temperature');
+      const unit   = isTemp ? '°C' : '%';
+
+      const baseArr = isTemp ? s.baseline_temp    : s.baseline_humidity;
+      const scenArr = isTemp ? s.scenario_temp    : s.scenario_humidity;
+      const p05Arr  = isTemp ? s.temp_p05         : s.humid_p05;
+      const p50Arr  = isTemp ? s.temp_p50         : s.humid_p50;
+      const p95Arr  = isTemp ? s.temp_p95         : s.humid_p95;
+      const hasBands = Array.isArray(p05Arr) && p05Arr.length > 0;
+
+      const baseLbl = 'Fără intervenție';
+      const scenLbl = 'Cu intervenție (estimat)';
+      const p50Lbl  = 'Mediană MC (p50)';
+      const bandLbl = 'Bandă incertitudine (p05–p95)';
+
+      const accentColor  = isTemp ? '#38bdf8' : '#34d399';
+      const accentAlpha  = isTemp ? 'rgba(56,189,248,' : 'rgba(52,211,153,';
+
+      const datasets = [
+
+        {
+          label: baseLbl, data: baseArr,
+          borderColor: '#64748b', borderDash: [6, 4], borderWidth: 2,
+          pointRadius: 0, fill: false, tension: 0, order: 5,
+        },
+      ];
+
+      if (hasBands) {
+
+        datasets.push({
+          label: bandLbl, data: p95Arr,
+          borderColor: 'transparent',
+          backgroundColor: accentAlpha + '0.13)',
+          borderWidth: 0, pointRadius: 0, fill: '+1', tension: 0, order: 4,
+        });
+
+        datasets.push({
+          label: '_p05', data: p05Arr,
+          borderColor: 'transparent',
+          backgroundColor: accentAlpha + '0.13)',
+          borderWidth: 0, pointRadius: 0, fill: '-1', tension: 0, order: 3,
+        });
+
+        datasets.push({
+          label: p50Lbl, data: p50Arr,
+          borderColor: accentAlpha + '0.7)',
+          borderWidth: 1.5, borderDash: [3, 3],
+          pointRadius: 0, fill: false, tension: 0, order: 2,
+        });
+      }
+
+      datasets.push({
+        label: scenLbl, data: scenArr,
+        borderColor: accentColor,
+        borderWidth: 2, pointRadius: 3, pointHoverRadius: 6,
+        pointBackgroundColor: accentColor,
+        fill: false, tension: 0, order: 1,
+      });
+
+      _aiChart = new Chart(canvas, {
+        type: 'line',
+        data: { labels: s.labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                color: '#94a3b8', font: { size: 11 },
+
+                filter: (item) => item.text !== '_p05',
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15,23,42,0.92)',
+              borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+              titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+              callbacks: {
+                label: (i) => {
+                  if (i.dataset.label === '_p05') return null;
+                  return ` ${i.dataset.label}: ${i.raw.toFixed(2)} ${unit}`;
+                },
+
+                footer: hasBands
+                  ? () => {
+                      const n = _aiData.uncertainty && _aiData.uncertainty.n_draws;
+                      return n ? `MC: ${n} simulări` : '';
+                    }
+                  : undefined,
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: { color: '#64748b', font: { size: 10 }, maxTicksLimit: 14 },
+              border: { display: false }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: {
+                color: '#64748b', font: { size: 10 },
+                callback: (v) => (Math.round(v * 100) / 100) + (isTemp ? '°' : '%')
+              },
+              border: { display: false }
+            }
+          }
+        }
+      });
+    }
+
+    </script>
+
+</body>
+</html>
