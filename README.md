@@ -54,7 +54,7 @@ Other limitations:
 ### Quick start
 
 ```bash
-git clone https://github.com/<your-username>/sylvacast.git
+git clone https://github.com/valentin-babiuc/sylvacast.git
 cd sylvacast
 ```
 
