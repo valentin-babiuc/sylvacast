@@ -41,6 +41,7 @@ Other limitations:
 - Annual means only; no seasonal split.
 - Local patch effect only, not regional or city-level climate.
 - Some coefficients (e.g. the roughness channel) are conservative estimates where no study isolates the effect directly; see the notes returned with every prediction.
+
 **Correction after thesis submission:** the albedo coefficient was originally set to +0.14 °C, which is the land-surface-temperature (LST) value from Li et al. rather than the converted air-temperature value. It is now +0.05 °C, the centre of the documented +0.02–0.08 °C range, consistent with how every other coefficient is chosen. This aligns the deterministic projection with the Monte Carlo median.
 
 ## Getting started
